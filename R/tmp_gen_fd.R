@@ -1,20 +1,54 @@
 #' FD Generation - KL Expansion
 #'
-#' @param ns
-#' @param eigsList
-#' @param basesList
-#' @param meansList
-#' @param distsArray
-#' @param evals
-#' @param kappasArray
-#' @param burnin
-#' @param silent
-#' @param ... Info for errors, such as dof for t
+#' Generation of FD using an autoregressive karhunen-loeve expansion. This can
+#'  include change points in any combination of the following:
+#'  \itemize{
+#'    \item Mean
+#'    \item Distribution
+#'    \item Eigenvalue(s)
+#'    \item Eigenvector(s)
+#'  }
+#'  In this sense, the function creates m 'groups' of discretely observed
+#'  functions with similar properties. See updated
+#'  version in the package fChange (\url{https://github.com/jrvanderdoes/fChange}).
 #'
-#' @return
+#' @param ns Vector of Numerics. Each value in N is the number of observations
+#'  for a given group.
+#' @param eigsList Vector of eigenvalues. Length 1 or m.
+#' @param basesList A list of bases (eigenfunctions), length m.
+#' @param meansList A vector of means, length 1 or N.
+#' @param distsArray A vector of distributions, length 1 or m.
+#' @param evals A vector of points indicating the points to evaluate the
+#'     functions on.
+#' @param kappasArray Numeric \[0,1\] indicating strength of VAR(1) process.
+#' @param burnin A numeric value indicating the number of burnin trials.
+#' @param silent A Boolean that toggles running output.
+#' @param dof Numeric for degrees of freedom with t-distribution.
+#' @param shape Numeric for shape of gamma distribution.
+#' @param ... Additional parameters to send in. Unused.
+#'
+#' @return List with (1) data (N-by-m) and (2) previous errors.
 #' @export
 #'
 #' @examples
+#' # result <- gen_FD_KL_Expansion(
+#' #   N=c(100,50,25),
+#' #   eigenvalues = list(rep(1,5),
+#' #                      c(1/sqrt(1:5)),
+#' #                      c(1/sqrt(1:5))),
+#' #
+#' #   parameters =list('bmotion'=list('N'=100, 'process'='bmotion', 'sd'=1),
+#' #                    'bbridge'=list('N'=100, 'process'='bbridge', 'sd'=1),
+#' #                    'kl'=list('process'='kl', 'N'=100,
+#' #                              'distribution'='Normal',
+#' #                              'eigenvalues'=1/1:4,
+#' #                              'mean'=0, 'dependence'=0,
+#' #                              'basis'=fda::create.bspline.basis(),
+#' #                              'sd'=1),
+#' #                    'ou'=list('N'=100, 'process'='ou', 'dependence'=0 ) ,
+#' #                    'far1'=list('N'=100, 'process'='far1', 'dependence'=0,
+#' #                                'sd'=1,'vary'=FALSE) )
+#' #                  )
 gen_FD_KL_Expansion <- function(ns,
                                 eigsList,
                                 basesList,
@@ -24,6 +58,8 @@ gen_FD_KL_Expansion <- function(ns,
                                 kappasArray = c(0),
                                 burnin = 100,
                                 silent = F,
+                                dof=NULL,
+                                shape=NULL,
                                 ...){
   # ns is a vector with length m for the number of data runs until next CP
   # - i.e. c(10,10,10) has 10 length TS then CP followed by 10 and another CP
@@ -53,7 +89,7 @@ gen_FD_KL_Expansion <- function(ns,
 
   getPsiList <- function(D, m,eigsList,kappasArray){
     psi <- list()
-    normsSD <- rnorm(max(D), mean=0, sd=1)
+    normsSD <- stats::rnorm(max(D), mean=0, sd=1)
 
     for(i in 1:m){
       groupSD <- normsSD[1:D[i]] * sqrt(eigsList[[i]])
@@ -73,6 +109,8 @@ gen_FD_KL_Expansion <- function(ns,
   meansList <- checkLength(meansList, 'meansList', m)
   distsArray <- unlist(checkLength(distsArray, 'distsArray', m))
   kappasArray <- unlist(checkLength(kappasArray, 'kappaArray', m))
+  if(!is.null(dof)) dof <- unlist(checkLength(dof, 'dof', m))
+  if(!is.null(shape)) shape <- unlist(checkLength(shape, 'shape', m))
 
   # Run Code
   data <- data.frame(matrix(NA, ncol = sum(ns), nrow = length(evals)))
@@ -96,6 +134,8 @@ gen_FD_KL_Expansion <- function(ns,
       evals = evals,
       peps = peps,
       psi = psi[[1]],
+      dof=dof[1],
+      shape=shape[1],
       ...)
 
     peps <- waste[[2]]
@@ -132,6 +172,8 @@ gen_FD_KL_Expansion <- function(ns,
         evals = evals,
         peps = peps,
         psi = psi[[i]],
+        dof=dof[i],
+        shape=shape[i],
         ...)
 
       data[,addIdx + j] <- result[[1]]
@@ -144,35 +186,25 @@ gen_FD_KL_Expansion <- function(ns,
 }
 
 
-#' Title
-#'
-#' @param eigs
-#' @param basis
-#' @param means
-#' @param dist
-#' @param evals
-#' @param peps
-#' @param psi
-#'
-#' @return
-#' @export
-#'
-#' @examples
+#' @noRd
+#' @keywords internal
 generateData_KL_Expansion <- function(eigs, basis, means, dist,
-                                      evals, peps, psi, ...){
+                                      evals, peps, psi, dof=NULL, shape=NULL,
+                                      ...){
 
   ## Functions
-  generateXi <- function(dist, sd,dof=3,skew=2){
+  generateXi <- function(dist, sd,dof=3,skew=2,shape=1,rate=1){
     ## This function give centered distributions with eig^2 var
 
     xi <- 0
 
     if(dist == 'Normal'){
 
-      xi <- rnorm(1,mean=0, sd=sd)
+      xi <- stats::rnorm(1,mean=0, sd=sd)
 
     }else if(dist == 'sn'){
-
+      if(!requireNamespace("fGarch", quietly = TRUE))
+        stop('Need "fGarch" package for skewed normal errors.')
       xi <- fGarch::rsnorm(1,sd = sd,xi = skew)
 
     }else if(dist == 'Binomial'){
@@ -184,16 +216,23 @@ generateData_KL_Expansion <- function(eigs, basis, means, dist,
       p <- 1 - sd^2/mean
       size <- round(mean/p)
 
-      xi <- rbinom(n=1,size=size,p=p) - mean
+      xi <- stats::rbinom(n=1,size=size,p=p) - mean
 
     }else if(dist == 'Exponential'){
 
-      xi <- rexp(1,rate = 1/sd) - sd
+      xi <- stats::rexp(1,rate = 1/sd) - sd
 
     }else if(dist == 't'){
-
-      xi <- rt(1, dof) * sqrt(sd^2 * (dof-2)/dof)
-
+      xi <- stats::rt(1, dof)
+      if(dof>2)
+        xi <- xi * sqrt(sd^2 * (dof - 2) / dof)
+    }else if (dist == "gamma") {
+      xi <- ( stats::rgamma(1,shape = shape, rate = rate) - shape/rate ) /
+        sqrt( shape * (1/rate)^2 ) * sd
+    }else if(dist == 'Laplace'){
+      if(!requireNamespace("jmuOutlier", quietly = TRUE))
+        stop('Need "jmuOutlier" package for laplace errors.')
+      xi <- jmuOutlier::rlaplace(1,0,sd)
     }else{
       stop(paste('Sorry, dist',dist,'not implemented yet'))
     }
@@ -218,11 +257,16 @@ generateData_KL_Expansion <- function(eigs, basis, means, dist,
     stop(paste('Length of means is',length(means),'not 1 or',n))
   }
 
-  # Generate
+  # Generate Noise
+  xi <- rep(NA,D)
+  for(j in 1:D){
+    xi[j] <- generateXi(dist=dist, sd=sqrt(eigs[j]), dof=dof, shape=shape, ...)
+  }
+
+  # Generate Data
   for(t in 1:n){
     for(j in 1:D){
-      xi <- generateXi(dist=dist, sd=sqrt(eigs[j]), ...)
-      Zeta[j,t] <- xi * eval.basis(evals[t], basis)[j]
+      Zeta[j,t] <- xi[j] * fda::eval.basis(evals[t], basis)[j]
     }
 
     eps[,t] <- Zeta[,t] + psi %*% peps[,t]
@@ -234,332 +278,315 @@ generateData_KL_Expansion <- function(eigs, basis, means, dist,
 
 
 
-#' Plot - FD Object Plot
-#'
-#' @param fdobj
-#' @param titleVal
-#'
-#' @return
-#' @export
-#'
-#' @examples
-plot_fd_3dsurf <- function(fdobj, titleVal){
-
-  singleRange <- fdobj$basis$rangeval
-  singleRangeSeq <- seq(singleRange[1],singleRange[2],length.out=100)
-  number <- length(fdobj$fdnames$reps)
-
-  fd_eval <- eval.fd(singleRangeSeq,
-                     data_fd)
-  valRange <- c(min(fd_eval),max(fd_eval))
-
-  plotData <- data.frame('evalRange'=singleRangeSeq,
-                         'FDRep'=1,
-                         'Value'=fd_eval[,1])
-
-  for(i in 2:number){
-    plotData <- rbind(plotData,
-                      data.frame('evalRange'=singleRangeSeq,
-                                 'FDRep'=i,
-                                 'Value'=fd_eval[,i])
-    )
-  }
-
-  #trellis.par.set("axis.line",list(col='black'))
-  trellis.par.set("axis.line",list(col=NA))
-  wireframe(x=Value ~ (evalRange)*(-FDRep),
-            data= plotData,
-            #trellis.par.set(list(axis.text=list(cex=2)),
-            #                "axis.line",list(col=NA)),
-            zlim=valRange,
-            aspect=c(3,.75,1),
-            drape=TRUE,colorkey = FALSE,
-            scales = list(arrows=FALSE,cex= 0.75,
-                          cex.title=1.5,
-                          x = list(at=seq(singleRange[1],
-                                          singleRange[2],
-                                          0.2),
-                                   labels=rev(seq(singleRange[2],
-                                                  singleRange[1],
-                                                  -0.2))),
-                          y = list(at=-seq(1, number, 9),
-                                   labels=seq(1, number, 9))),
-            xlab="Eval Range",ylab="\nFD Reps",zlab="Value",
-            main=titleVal)
-}
-
-
-#' Title
-#'
-#' @param fdobj
-#' @param titleVal
-#'
-#' @return
-#' @export
-#'
-#' @examples
-plot_fd_3dsurf_plotly <- function(fdobj, titleVal){
-
-  singleRange <- fdobj$basis$rangeval
-  singleRangeSeq <- seq(singleRange[1],singleRange[2],length.out=100)
-  number <- length(fdobj$fdnames$reps)
-
-  fd_eval <- eval.fd(singleRangeSeq,
-                     data_fd)
-  valRange <- c(min(fd_eval),max(fd_eval))
-
-  plotData <- data.frame('evalRange'=singleRangeSeq,
-                         'FDRep'=1,
-                         'Value'=fd_eval[,1])
-
-  for(i in 2:number){
-    plotData <- rbind(plotData,
-                      data.frame('evalRange'=singleRangeSeq,
-                                 'FDRep'=i,
-                                 'Value'=fd_eval[,i])
-    )
-  }
-
-  plot_ly() %>%
-    add_trace(data = plotData,
-              x=plotData$FDRep,
-              y=plotData$evalRange,
-              z=plotData$Value, type="mesh3d" )
-
-  tmpData <-
-    as.matrix(plotData %>%
-                pivot_wider(., names_from ='evalRange',values_from= 'Value')
-    )[,-1]
-
-  scene = list(camera = list(eye = list(x = -1.5, y = -1.5, z = 1.5)))
-
-  plot_ly(x = 1:number,
-          y = singleRangeSeq,
-          z = t(tmpData)) %>%
-    add_surface() %>%
-    layout(
-      scene = list(
-        yaxis = list(title = "EvalRange"),
-        xaxis = list(title = "FD Sims"),
-        zaxis = list(title = "Value")
-      )) %>%
-    layout(title = titleVal, scene = scene)
-}
-
-
-#' Title
-#'
-#' @param fdobj
-#' @param titleVal
-#'
-#' @return
-#' @export
-#'
-#' @examples
-plot_fd_3dlines_plotly <- function(fdobj, titleVal){
-
-  singleRange <- fdobj$basis$rangeval
-  singleRangeSeq <- seq(singleRange[1],singleRange[2],length.out=100)
-  number <- length(fdobj$fdnames$reps)
-
-  fd_eval <- eval.fd(singleRangeSeq,
-                     data_fd)
-  valRange <- c(min(fd_eval),max(fd_eval))
-
-  plotData <- data.frame('evalRange'=singleRangeSeq,
-                         'FDRep'=1,
-                         'Value'=fd_eval[,1])
-
-  for(i in 2:number){
-    plotData <- rbind(plotData,
-                      data.frame('evalRange'=singleRangeSeq,
-                                 'FDRep'=i,
-                                 'Value'=fd_eval[,i])
-    )
-  }
-
-  scene = list(camera = list(eye = list(x = -1.5, y = -1.5, z = 1.5)))
-
-  tmpColors <- brewer.pal(11,"Spectral")
-  tmpColors[6] <- 'yellow'
-
-  plot_ly(plotData,
-          x = ~as.factor(FDRep), y = ~evalRange, z = ~Value,
-          type = 'scatter3d', mode = 'lines',
-          color = ~as.factor(FDRep),
-          colors = tmpColors) %>%
-    #colors = c("red", "yellow", "blue")) %>%
-    #colors='Spectral') %>%
-    layout(
-      scene = list(
-        yaxis = list(title = "EvalRange"),
-        xaxis = list(title = "FD Sims"),
-        zaxis = list(title = "Value")
-      )) %>%
-    layout(title = titleVal, scene = scene) %>%
-    layout(showlegend = FALSE)
-  #line = list(width = 4, color = ~as.factor(FDRep),
-  #            colorscale = list(c(0,'#BA52ED'), c(1,'#FCB040'))))
-}
-
-
-#' Title
-#'
-#' @param fd_eval
-#' @param singleRangeSeq
-#' @param titleVal
-#'
-#' @return
-#' @export
-#'
-#' @examples
-plot_evalfd_3dsurf <- function(fd_eval, singleRangeSeq,
-                               titleVal=NULL){
-
-  number <- length(fd_eval[1,])
-  valRange <- c(floor(min(fd_eval)),
-                ceiling(max(fd_eval)))
-
-  plotData <- data.frame('evalRange'=singleRangeSeq,
-                         'FDRep'=1,
-                         'Value'=fd_eval[,1])
-
-  for(i in 2:number){
-    plotData <- rbind(plotData,
-                      data.frame('evalRange'=singleRangeSeq,
-                                 'FDRep'=i,
-                                 'Value'=fd_eval[,i])
-    )
-  }
-
-  #trellis.par.set("axis.line",list(col='black'))
-  trellis.par.set("axis.line",list(col=NA))
-  wireframe(x=Value ~ (evalRange)*(-FDRep),
-            data= plotData,
-            #trellis.par.set(list(axis.text=list(cex=2)),
-            #                "axis.line",list(col=NA)),
-            zlim=valRange,
-            aspect=c(3,.75,1),
-            drape=TRUE,colorkey = FALSE,
-            scales = list(arrows=FALSE,cex= 0.75,
-                          cex.title=1.5,
-                          x = list(at=seq(min(singleRangeSeq),
-                                          max(singleRangeSeq),
-                                          0.2),
-                                   labels=rev(seq(max(singleRangeSeq),
-                                                  min(singleRangeSeq),
-                                                  -0.2))),
-                          y = list(at=-seq(1, number, 9),
-                                   labels=seq(1, number, 9))),
-            xlab="Eval Range",ylab="\nFD Reps",zlab="Value",
-            main=titleVal)
-}
-
-
-#' Title
-#'
-#' @param fd_eval
-#' @param singleRangeSeq
-#' @param titleVal
-#'
-#' @return
-#' @export
-#'
-#' @examples
-plot_evalfd_3dsurf_plotly <- function(fd_eval, singleRangeSeq,
-                                      titleVal=NULL){
-
-  number <- length(fd_eval[1,])
-  valRange <- c(min(fd_eval),max(fd_eval))
-
-  plotData <- data.frame('evalRange'=singleRangeSeq,
-                         'FDRep'=1,
-                         'Value'=fd_eval[,1])
-
-  for(i in 2:number){
-    plotData <- rbind(plotData,
-                      data.frame('evalRange'=singleRangeSeq,
-                                 'FDRep'=i,
-                                 'Value'=fd_eval[,i])
-    )
-  }
-
-  plot_ly() %>%
-    add_trace(data = plotData,
-              x=plotData$FDRep,
-              y=plotData$evalRange,
-              z=plotData$Value, type="mesh3d" )
-
-  tmpData <-
-    as.matrix(plotData %>%
-                pivot_wider(., names_from ='evalRange',values_from= 'Value')
-    )[,-1]
-
-  scene = list(camera = list(eye = list(x = -1.5, y = -1.5, z = 1.5)))
-
-  plot_ly(x = 1:number,
-          y = singleRangeSeq,
-          z = t(tmpData)) %>%
-    add_surface() %>%
-    layout(
-      scene = list(
-        yaxis = list(title = "EvalRange"),
-        xaxis = list(title = "FD Sims"),
-        zaxis = list(title = "Value")
-      )) %>%
-    layout(title = titleVal, scene = scene)
-}
-
-
-#' Title
-#'
-#' @param fd_eval
-#' @param singleRangeSeq
-#' @param titleVal
-#'
-#' @return
-#' @export
-#'
-#' @examples
-plot_evalfd_3dlines_plotly <- function(fd_eval, singleRangeSeq,
-                                       titleVal=NULL){
-
-  number <- length(fd_eval[1,])
-  valRange <- c(min(fd_eval),max(fd_eval))
-
-  plotData <- data.frame('evalRange'=singleRangeSeq,
-                         'FDRep'=1,
-                         'Value'=fd_eval[,1])
-
-  for(i in 2:number){
-    plotData <- rbind(plotData,
-                      data.frame('evalRange'=singleRangeSeq,
-                                 'FDRep'=i,
-                                 'Value'=fd_eval[,i])
-    )
-  }
-
-  scene = list(camera = list(eye = list(x = -1.5, y = -1.5, z = 1.5)))
-
-  tmpColors <- brewer.pal(11,"Spectral")
-  tmpColors[6] <- 'yellow'
-
-  plot_ly(plotData,
-          x = ~as.factor(FDRep), y = ~evalRange, z = ~Value,
-          type = 'scatter3d', mode = 'lines',
-          color = ~as.factor(FDRep),
-          colors = tmpColors) %>%
-    #colors = c("red", "yellow", "blue")) %>%
-    #colors='Spectral') %>%
-    layout(
-      scene = list(
-        yaxis = list(title = "EvalRange"),
-        xaxis = list(title = "FD Sims"),
-        zaxis = list(title = "Value")
-      )) %>%
-    layout(title = titleVal, scene = scene) %>%
-    layout(showlegend = FALSE)
-  #line = list(width = 4, color = ~as.factor(FDRep),
-  #            colorscale = list(c(0,'#BA52ED'), c(1,'#FCB040'))))
-}
-
+# #' Plot - FD Object Plot
+# #'
+# #' @noRd
+# #' @keywords internal
+# plot_fd_3dsurf <- function(fdobj, titleVal){
+#
+#   singleRange <- fdobj$basis$rangeval
+#   singleRangeSeq <- seq(singleRange[1],singleRange[2],length.out=100)
+#   number <- length(fdobj$fdnames$reps)
+#
+#   fd_eval <- eval.fd(singleRangeSeq,
+#                      data_fd)
+#   valRange <- c(min(fd_eval),max(fd_eval))
+#
+#   plotData <- data.frame('evalRange'=singleRangeSeq,
+#                          'FDRep'=1,
+#                          'Value'=fd_eval[,1])
+#
+#   for(i in 2:number){
+#     plotData <- rbind(plotData,
+#                       data.frame('evalRange'=singleRangeSeq,
+#                                  'FDRep'=i,
+#                                  'Value'=fd_eval[,i])
+#     )
+#   }
+#
+#   #trellis.par.set("axis.line",list(col='black'))
+#   trellis.par.set("axis.line",list(col=NA))
+#   wireframe(x=Value ~ (evalRange)*(-FDRep),
+#             data= plotData,
+#             #trellis.par.set(list(axis.text=list(cex=2)),
+#             #                "axis.line",list(col=NA)),
+#             zlim=valRange,
+#             aspect=c(3,.75,1),
+#             drape=TRUE,colorkey = FALSE,
+#             scales = list(arrows=FALSE,cex= 0.75,
+#                           cex.title=1.5,
+#                           x = list(at=seq(singleRange[1],
+#                                           singleRange[2],
+#                                           0.2),
+#                                    labels=rev(seq(singleRange[2],
+#                                                   singleRange[1],
+#                                                   -0.2))),
+#                           y = list(at=-seq(1, number, 9),
+#                                    labels=seq(1, number, 9))),
+#             xlab="Eval Range",ylab="\nFD Reps",zlab="Value",
+#             main=titleVal)
+# }
+#
+#
+# #' Title
+# #'
+# #' @noRd
+# #' @keywords internal
+# plot_fd_3dsurf_plotly <- function(fdobj, titleVal){
+#
+#   singleRange <- fdobj$basis$rangeval
+#   singleRangeSeq <- seq(singleRange[1],singleRange[2],length.out=100)
+#   number <- length(fdobj$fdnames$reps)
+#
+#   fd_eval <- eval.fd(singleRangeSeq,
+#                      data_fd)
+#   valRange <- c(min(fd_eval),max(fd_eval))
+#
+#   plotData <- data.frame('evalRange'=singleRangeSeq,
+#                          'FDRep'=1,
+#                          'Value'=fd_eval[,1])
+#
+#   for(i in 2:number){
+#     plotData <- rbind(plotData,
+#                      data.frame('evalRange'=singleRangeSeq,
+#                                  'FDRep'=i,
+#                                  'Value'=fd_eval[,i])
+#     )
+#   }
+#
+#   plot_ly() %>%
+#     add_trace(data = plotData,
+#               x=plotData$FDRep,
+#               y=plotData$evalRange,
+#               z=plotData$Value, type="mesh3d" )
+#
+#   tmpData <-
+#    as.matrix(plotData %>%
+#                 pivot_wider(., names_from ='evalRange',values_from= 'Value')
+#     )[,-1]
+#
+#   scene = list(camera = list(eye = list(x = -1.5, y = -1.5, z = 1.5)))
+#
+#   plot_ly(x = 1:number,
+#          y = singleRangeSeq,
+#           z = t(tmpData)) %>%
+#     add_surface() %>%
+#     layout(
+#       scene = list(
+#         yaxis = list(title = "EvalRange"),
+#         xaxis = list(title = "FD Sims"),
+#         zaxis = list(title = "Value")
+#       )) %>%
+#     layout(title = titleVal, scene = scene)
+# }
+#
+#
+# #' Title
+# #'
+# #' @param fdobj
+# #' @param titleVal
+# #'
+# #' @return
+# #' @export
+# #'
+# #' @examples
+# plot_fd_3dlines_plotly <- function(fdobj, titleVal){
+#
+#   singleRange <- fdobj$basis$rangeval
+#   singleRangeSeq <- seq(singleRange[1],singleRange[2],length.out=100)
+#   number <- length(fdobj$fdnames$reps)
+#
+#   fd_eval <- eval.fd(singleRangeSeq,
+#                      data_fd)
+#   valRange <- c(min(fd_eval),max(fd_eval))
+#
+#   plotData <- data.frame('evalRange'=singleRangeSeq,
+#                          'FDRep'=1,
+#                          'Value'=fd_eval[,1])
+#
+#   for(i in 2:number){
+#     plotData <- rbind(plotData,
+#                       data.frame('evalRange'=singleRangeSeq,
+#                                  'FDRep'=i,
+#                                  'Value'=fd_eval[,i])
+#     )
+#   }
+#
+#   scene = list(camera = list(eye = list(x = -1.5, y = -1.5, z = 1.5)))
+#
+#   tmpColors <- brewer.pal(11,"Spectral")
+#   tmpColors[6] <- 'yellow'
+#
+#   plot_ly(plotData,
+#           x = ~as.factor(FDRep), y = ~evalRange, z = ~Value,
+#           type = 'scatter3d', mode = 'lines',
+#           color = ~as.factor(FDRep),
+#           colors = tmpColors) %>%
+#     #colors = c("red", "yellow", "blue")) %>%
+#     #colors='Spectral') %>%
+#     layout(
+#       scene = list(
+#         yaxis = list(title = "EvalRange"),
+#         xaxis = list(title = "FD Sims"),
+#         zaxis = list(title = "Value")
+#       )) %>%
+#     layout(title = titleVal, scene = scene) %>%
+#     layout(showlegend = FALSE)
+#   #line = list(width = 4, color = ~as.factor(FDRep),
+#   #            colorscale = list(c(0,'#BA52ED'), c(1,'#FCB040'))))
+# }
+#
+#
+# #' Title
+# #'
+# #' @noRd
+# #' @keywords internal
+# plot_evalfd_3dsurf <- function(fd_eval, singleRangeSeq,
+#                                titleVal=NULL){
+#
+#   number <- length(fd_eval[1,])
+#   valRange <- c(floor(min(fd_eval)),
+#                 ceiling(max(fd_eval)))
+#
+#   plotData <- data.frame('evalRange'=singleRangeSeq,
+#                          'FDRep'=1,
+#                          'Value'=fd_eval[,1])
+#
+#   for(i in 2:number){
+#     plotData <- rbind(plotData,
+#                       data.frame('evalRange'=singleRangeSeq,
+#                                  'FDRep'=i,
+#                                  'Value'=fd_eval[,i])
+#     )
+#   }
+#
+#   #trellis.par.set("axis.line",list(col='black'))
+#   trellis.par.set("axis.line",list(col=NA))
+#   wireframe(x=Value ~ (evalRange)*(-FDRep),
+#             data= plotData,
+#             #trellis.par.set(list(axis.text=list(cex=2)),
+#             #                "axis.line",list(col=NA)),
+#             zlim=valRange,
+#             aspect=c(3,.75,1),
+#             drape=TRUE,colorkey = FALSE,
+#             scales = list(arrows=FALSE,cex= 0.75,
+#                           cex.title=1.5,
+#                           x = list(at=seq(min(singleRangeSeq),
+#                                           max(singleRangeSeq),
+#                                           0.2),
+#                                    labels=rev(seq(max(singleRangeSeq),
+#                                                   min(singleRangeSeq),
+#                                                   -0.2))),
+#                           y = list(at=-seq(1, number, 9),
+#                                    labels=seq(1, number, 9))),
+#             xlab="Eval Range",ylab="\nFD Reps",zlab="Value",
+#             main=titleVal)
+# }
+#
+#
+# #' Title
+# #'
+# #' @param fd_eval
+# #' @param singleRangeSeq
+# #' @param titleVal
+# #'
+# #' @return
+# #' @export
+# #'
+# #' @examples
+# plot_evalfd_3dsurf_plotly <- function(fd_eval, singleRangeSeq,
+#                                       titleVal=NULL){
+#
+#   number <- length(fd_eval[1,])
+#   valRange <- c(min(fd_eval),max(fd_eval))
+#
+#   plotData <- data.frame('evalRange'=singleRangeSeq,
+#                          'FDRep'=1,
+#                          'Value'=fd_eval[,1])
+#
+#   for(i in 2:number){
+#     plotData <- rbind(plotData,
+#                       data.frame('evalRange'=singleRangeSeq,
+#                                  'FDRep'=i,
+#                                  'Value'=fd_eval[,i])
+#     )
+#   }
+#
+#   plot_ly() %>%
+#     add_trace(data = plotData,
+#               x=plotData$FDRep,
+#               y=plotData$evalRange,
+#               z=plotData$Value, type="mesh3d" )
+#
+#   tmpData <-
+#     as.matrix(plotData %>%
+#                 pivot_wider(., names_from ='evalRange',values_from= 'Value')
+#     )[,-1]
+#
+#   scene = list(camera = list(eye = list(x = -1.5, y = -1.5, z = 1.5)))
+#
+#   plot_ly(x = 1:number,
+#           y = singleRangeSeq,
+#           z = t(tmpData)) %>%
+#     add_surface() %>%
+#     layout(
+#       scene = list(
+#         yaxis = list(title = "EvalRange"),
+#         xaxis = list(title = "FD Sims"),
+#         zaxis = list(title = "Value")
+#       )) %>%
+#     layout(title = titleVal, scene = scene)
+# }
+#
+#
+# #' Title
+# #'
+# #' @param fd_eval
+# #' @param singleRangeSeq
+# #' @param titleVal
+# #'
+# #' @return
+# #' @export
+# #'
+# #' @examples
+# plot_evalfd_3dlines_plotly <- function(fd_eval, singleRangeSeq,
+#                                        titleVal=NULL){
+#
+#   number <- length(fd_eval[1,])
+#   valRange <- c(min(fd_eval),max(fd_eval))
+#
+#   plotData <- data.frame('evalRange'=singleRangeSeq,
+#                          'FDRep'=1,
+#                          'Value'=fd_eval[,1])
+#
+#   for(i in 2:number){
+#     plotData <- rbind(plotData,
+#                       data.frame('evalRange'=singleRangeSeq,
+#                                  'FDRep'=i,
+#                                  'Value'=fd_eval[,i])
+#     )
+#   }
+#
+#   scene = list(camera = list(eye = list(x = -1.5, y = -1.5, z = 1.5)))
+#
+#   tmpColors <- brewer.pal(11,"Spectral")
+#   tmpColors[6] <- 'yellow'
+#
+#   plot_ly(plotData,
+#           x = ~as.factor(FDRep), y = ~evalRange, z = ~Value,
+#           type = 'scatter3d', mode = 'lines',
+#           color = ~as.factor(FDRep),
+#           colors = tmpColors) %>%
+#     #colors = c("red", "yellow", "blue")) %>%
+#     #colors='Spectral') %>%
+#     layout(
+#       scene = list(
+#         yaxis = list(title = "EvalRange"),
+#         xaxis = list(title = "FD Sims"),
+#         zaxis = list(title = "Value")
+#       )) %>%
+#     layout(title = titleVal, scene = scene) %>%
+#     layout(showlegend = FALSE)
+#   #line = list(width = 4, color = ~as.factor(FDRep),
+#   #            colorscale = list(c(0,'#BA52ED'), c(1,'#FCB040'))))
+# }

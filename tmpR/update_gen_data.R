@@ -33,7 +33,6 @@
 #' @param silent A Boolean that toggles running output
 #'
 #' @return A data.frame of m columns length(evals) rows (TODO:: Verify)
-#'
 #' @export
 #'
 #' @examples
@@ -64,41 +63,26 @@ generate_data_fd <- function(ns,
                              kappasArray = c(0),
                              burnin = 100,
                              silent = FALSE) {
-  # ns is a vector with length m for the number of data runs until next CP
-  # - i.e. c(10,10,10) has 10 length TS then CP followed by 10 and another CP
-  # eigsList is a list of vectors giving the eigenvalues for each distribution
-  # - Length of list be 1 or m
-  # basesList is a list of bases (eigf) for each distribution
-  # - Length should be 1 or m
-  # - Define basis on (0, 1)
-  # meansList is a list of means for each distribution
-  # - Length should be 1 or m
-  # distsArray is a vector of distributions to each run
-  # - Length should be 1 or m
-  # evals is the vector of points to evaluate
-  # kappasArray is a vector of Kappas for VAR
-  # - Length should be 1 or m
-  
   ## Verification
   m <- length(ns)
-  
+
   eigsList <- .checkLength(eigsList, "eigsList", m)
   basesList <- .checkLength(basesList, "basesList", m)
   meansList <- .checkLength(meansList, "meansList", m)
   distsArray <- unlist(.checkLength(distsArray, "distsArray", m))
   kappasArray <- unlist(.checkLength(kappasArray, "kappaArray", m))
-  
+
   # Prepare to generate
   data <- data.frame(matrix(NA, ncol = sum(ns), nrow = length(evals)))
   addIdx <- 0
-  
+
   # Setup psi
   Ds <- 1:m
   for (i in 1:m) {
     Ds[i] <- length(eigsList[[i]])
   }
   psi <- .getPsiList(Ds, eigsList, kappasArray)
-  
+
   # Burnin for VAR
   peps <- data.frame(matrix(0, ncol = length(evals), nrow = Ds[1]))
   for (j in 1:burnin) {
@@ -111,13 +95,13 @@ generate_data_fd <- function(ns,
       peps = peps,
       psi = psi[[1]]
     )
-    
+
     peps <- waste[[2]]
   }
-  
+
   for (i in 1:m) {
     if (!silent) cat(paste0("Running setup ", i, "/", m, "\n"))
-    
+
     # If Num of Eigs increases or decreases (only at CPs)
     psiDim1 <- dim(psi[[i]])[1]
     pepDim1 <- dim(peps)[1]
@@ -134,7 +118,7 @@ generate_data_fd <- function(ns,
         }
       }
     }
-    
+
     for (j in 1:ns[i]) {
       result <- .generateData_KL_Expansion(
         eigs = eigsList[[i]],
@@ -145,13 +129,13 @@ generate_data_fd <- function(ns,
         peps = peps,
         psi = psi[[i]]
       )
-      
+
       data[, addIdx + j] <- result[[1]]
       peps <- result[[2]]
     }
     addIdx <- addIdx + ns[i] # j
   }
-  
+
   data
 }
 
@@ -183,7 +167,7 @@ generate_data_fd <- function(ns,
   } else if (length(dataList) != m) {
     stop(paste(name, "is length", length(dataList), "not 1 or", m, "\n"))
   }
-  
+
   dataList
 }
 
@@ -201,14 +185,14 @@ generate_data_fd <- function(ns,
 .getPsiList <- function(D, eigsList, kappasArray) {
   psi <- list()
   normsSD <- stats::rnorm(max(D), mean = 0, sd = 1)
-  
+
   for (i in 1:length(D)) {
     groupSD <- normsSD[1:D[i]] * sqrt(eigsList[[i]])
     psi0 <- groupSD %*% t(groupSD)
     psi0 <- psi0 / sqrt(sum(psi0^2)) ## TODO:: Check this
     psi[[i]] <- kappasArray[i] * psi0
   }
-  
+
   psi
 }
 
@@ -236,18 +220,18 @@ generate_data_fd <- function(ns,
   # Setup
   n <- length(evals)
   D <- length(eigs)
-  
+
   # X <- rep(0, n)
   # Zeta <- eps <-
   #   data.frame(matrix(NA,ncol=n,nrow=D)) # Matrix with col as time, row as dimension
-  
+
   # Verify
   if (length(means) == 1) {
     means <- rep(means, n)
   } else if (length(means) != n) {
     stop(paste("Length of means is", length(means), "not 1 or", n))
   }
-  
+
   # Generate - No Loop
   eval_basis <- fda::eval.basis(evals, basis)
   # Row for each time, columns for eigen
@@ -256,7 +240,7 @@ generate_data_fd <- function(ns,
   },
   dist = dist, n = n
   )
-  
+
   Zeta <- tryCatch(xi * eval_basis,
                    error = function(e) {
                      stop(call. = F, paste0(
@@ -265,10 +249,10 @@ generate_data_fd <- function(ns,
                      ))
                    }
   )
-  
+
   eps <- Zeta + t(psi %*% as.matrix(peps))
   X <- means + rowSums(eps)
-  
+
   # Generate
   # for(t in 1:n){
   #   eval_basis <- fda::eval.basis(evals[t], basis)
@@ -281,7 +265,7 @@ generate_data_fd <- function(ns,
   #   eps[,t] <- Zeta[,t] + psi %*% peps[,t]
   #   X[t] <- means[t] + sum(eps[,t])
   # }
-  
+
   list(X, t(eps))
 }
 
@@ -300,18 +284,18 @@ generate_data_fd <- function(ns,
 #' @noRd
 .generateXi <- function(dist, sd, n = 1) {
   ## This function give centered distributions with eig^2 var
-  
+
   if (dist == "Normal") {
     xi <- stats::rnorm(n, mean = 0, sd = sd)
   } else if (dist == "Binomial") {
     if (sd == 0) {
       return(rep(0, n))
     }
-    
+
     mean <- 10 * sd^2 # arbitrary, must exceed var
     p <- 1 - sd^2 / mean
     size <- round(mean / p)
-    
+
     xi <- stats::rbinom(n = n, size = size, p = p) - mean
   } else if (dist == "Exponential") {
     xi <- stats::rexp(n, rate = 1 / sd) - sd
@@ -329,6 +313,6 @@ generate_data_fd <- function(ns,
   } else {
     stop(paste("Sorry, dist", dist, "not implemented yet"))
   }
-  
+
   xi
 }
