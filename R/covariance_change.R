@@ -5,11 +5,11 @@
 #'
 #' @param X Numeric data.frame of functional data observations--rows for
 #'    evaluated values and columns indicating FD
-#' @param kappa (Optional) Numeric used for weighting and such. Default is 1/4.
+#' @param kappa (Optional) Numeric used for weighting and such. Default is 1/4
 #' @param len (Optional) Numeric for window/repetitions for covariance change.
 #'    Default is 30.
 #'
-#' @return Location of change. NA for no change and numeric if there is a change.
+#' @return Location of change. NA for no change and numeric if there is a change
 #' @export
 #'
 #' @references Change point analysis of covariance functions: a weighted
