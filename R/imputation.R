@@ -11,17 +11,18 @@
 #'
 #' @return Numeric data.frame with rows for evaluated values and columns
 #'    indicating FD and no missing values
+#'
 #' @noRd
 #' @keywords internal
 #'
 #' @examples
-#' data_missing <- data.frame(
-#'   "FD1" = c(1:8, NA, 10) + stats:rnorm(10),
-#'   "FD2" = 21:30 + stats:rnorm(10),
-#'   "FD3" = c(1:3, NA, rep(6, 3), 8, rep(NA, 2)) + stats:rnorm(10)
-#' )
-#' evalPts <- c(1:10)
-#' functional_imputation(data_missing, evalPts)
+#' # data_missing <- data.frame(
+#' #   "FD1" = c(1:8, NA, 10) + stats:rnorm(10),
+#' #   "FD2" = 21:30 + stats:rnorm(10),
+#' #   "FD3" = c(1:3, NA, rep(6, 3), 8, rep(NA, 2)) + stats:rnorm(10)
+#' # )
+#' # evalPts <- c(1:10)
+#' # functional_imputation(data_missing, evalPts)
 functional_imputation <- function(data, evalPts = 1:nrow(data),
                                   basis = fda::create.bspline.basis(
                                     nbasis = 21,
