@@ -31,24 +31,15 @@
 #' @export
 #'
 #' @examples
-#' # result <- gen_FD_KL_Expansion(
-#' #   N=c(100,50,25),
-#' #   eigenvalues = list(rep(1,5),
-#' #                      c(1/sqrt(1:5)),
-#' #                      c(1/sqrt(1:5))),
-#' #
-#' #   parameters =list('bmotion'=list('N'=100, 'process'='bmotion', 'sd'=1),
-#' #                    'bbridge'=list('N'=100, 'process'='bbridge', 'sd'=1),
-#' #                    'kl'=list('process'='kl', 'N'=100,
-#' #                              'distribution'='Normal',
-#' #                              'eigenvalues'=1/1:4,
-#' #                              'mean'=0, 'dependence'=0,
-#' #                              'basis'=fda::create.bspline.basis(),
-#' #                              'sd'=1),
-#' #                    'ou'=list('N'=100, 'process'='ou', 'dependence'=0 ) ,
-#' #                    'far1'=list('N'=100, 'process'='far1', 'dependence'=0,
-#' #                                'sd'=1,'vary'=FALSE) )
-#' #                  )
+#' data_KL <- gen_FD_KL_Expansion(ns = c(20,20),
+#'     eigsList = list(c(3,2,1,0.5),
+#'                     c(3,2,1,0.5)),
+#'     basesList = list(fda::create.bspline.basis(nbasis=4, norder=4),
+#'                      fda::create.bspline.basis(nbasis=4, norder=4)),
+#'     meansList = c(0,0),
+#'     distsArray = c('Normal','Normal'),
+#'     evals = seq(0,1,0.05),
+#'     kappasArray = c(0,0))
 gen_FD_KL_Expansion <- function(ns,
                                 eigsList,
                                 basesList,

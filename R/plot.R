@@ -1,16 +1,16 @@
 #' Plot functional data
 #'
 #' Function to display functional data. See vastly improved visualization in the
-#'  package fChange (\url{https://github.com/jrvanderdoes/fChange}).
+#'  package fChange.
 #'
-#' @param data Numeric data.frame with evaled points on rows and fd objects in columns.
-#' @param curve_points Evaluation points.
+#' @param data Numeric data.frame with evaled points on rows and fd objects in columns
+#' @param curve_points Evaluation points
 #' @param plot_title,val_axis_title,res_axis_title,FD_axis_title Titles for use
-#'  in the plot.
-#' @param FDReps Point to label individual curves.
-#' @param eye Angle to view plot.
-#' @param aspectratio Relative size of each dimension.
-#' @param showticklabels Boolean if ticks should be shown on plot.
+#'  in the plot
+#' @param FDReps Point to label individual curves
+#' @param eye Angle to view plot
+#' @param aspectratio Relative size of each dimension
+#' @param showticklabels Boolean if ticks should be shown on plot
 #'
 #' @return A plotly object.
 #' @export
