@@ -3,7 +3,7 @@
 #' The hourly electricity spot prices from Spain in 2014.
 #'
 #' @format ## `electricity`
-#' A data.frame with columns being the 365 days and rows the 24 hours.
+#' A data.frame with 365 columns (days) and 24 rows (hours).
 #'
 #' @source <www.omie.es>
 "electricity"
@@ -14,7 +14,7 @@
 #' Number of pedestrians at an intersection in Melbourne Australia (2019-2021).
 #'
 #' @format ## `pedestrians`
-#' A data.frame with columns being the 312 days and rows the 24 hours.
+#' A data.frame with 312 columns (days) and 24 rows (hours).
 "pedestrians"
 
 
@@ -24,5 +24,5 @@
 #'  (removing days without information, i.e. weekends and holidays).
 #'
 #' @format ## `rates`
-#' A data.frame with columns being the 505 days and rows the 15 minute intraday time.
+#' A data.frame with 505 columns (days) and 390 rows (15 minutes).
 "TWTR"
