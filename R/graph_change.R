@@ -15,8 +15,7 @@
 #' @export
 #'
 #' @references Chen H, Zhang NR, Chu L, Song H (2020). _gSeg: Graph-Based
-#'  Change-Point Detection (g-Segmentation)_. R package version 1.0,
-#'  <https://CRAN.R-project.org/package=gSeg>.
+#'  Change-Point Detection (g-Segmentation)_. R package version 1.0.
 graph_segmentation <- function (n, E, statistics = c("all", "o", "w", "g", "m"),
                                 n0 = 0.05 * n, n1 = 0.95 * n,
                                 pval.appr = TRUE, skew.corr = TRUE,
