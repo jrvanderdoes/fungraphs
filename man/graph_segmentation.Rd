@@ -45,6 +45,5 @@ Graph-based change point detection
 }
 \references{
 Chen H, Zhang NR, Chu L, Song H (2020). \emph{gSeg: Graph-Based
-Change-Point Detection (g-Segmentation)}. R package version 1.0,
-\url{https://CRAN.R-project.org/package=gSeg}.
+Change-Point Detection (g-Segmentation)}. R package version 1.0.
 }
